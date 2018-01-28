@@ -12,11 +12,13 @@ it support several features such as
  * lazy expression
  * string preprocessor
  * dynamic object management
+ * APIs scalability (common, specialized)
+ * weak, dynamic, duck typing
  
 the purpose of Orb-Script to provide easy programming for any embedded device (similar with PHP idea)
 accessing direct low-level are only available through native APIs (which is implemented using syscall mechanism)
-runtime processing are done by Orb-Weaver virtual machine (OWvM), each variable are treated as dynamic object therefore
-it's type cannot be known during compiler process, OWVM will trigger an exception and terminate execution
+runtime processing are done by Orb-Weaver virtual machine (OWVM), each variable are treated as dynamic object therefore
+it's type cannot be known during compile process, OWVM will trigger an exception and terminate execution
 when type operation didn't match with a specified object
 
 the language itself is Generic Purpose Language therefore it can ported for different type of purpose
@@ -24,7 +26,7 @@ we're currently working to port the language for web-service development, theref
 embedded application and web-service could be done within the same environment, eliminating the needs
 to develop in separate platform, one could say "a unified language for different type of platform"
 
-glome are available in
+glome are available as
  * CLR library (for integrating with managed DotNET application)
  * console application
  * CGI interpreter (for dynamic website integration)
