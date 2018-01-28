@@ -12,6 +12,7 @@ it support several features such as
  * lazy expression
  * string preprocessor
  * dynamic object management
+ 
 the purpose of Orb-Script to provide easy programming for any embedded device (similar with PHP idea)
 accessing direct low-level are only available through native APIs (which is implemented using syscall mechanism)
 runtime processing are done by Orb-Weaver virtual machine (OWvM), each variable are treated as dynamic object therefore
