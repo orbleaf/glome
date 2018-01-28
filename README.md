@@ -19,4 +19,14 @@ runtime processing are done by Orb-Weaver virtual machine (OWvM), each variable 
 it's type cannot be known during compiler process, OWVM will trigger an exception and terminate execution
 when type operation didn't match with a specified object
 
+the language itself is Generic Purpose Language therefore it can ported for different type of purpose
+we're currently working to port the language for web-service development, therefore developing
+embedded application and web-service could be done within the same environment, eliminating the needs
+to develop in separate platform, one could say "a unified language for different type of platform"
+
+glome are available in
+ * CLR library (for integrating with managed DotNET application)
+ * console application
+ * CGI interpreter (for dynamic website integration)
+
 feel free to provide a new insight of how an Orb-Script should be
