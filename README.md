@@ -34,7 +34,7 @@ glome are available as
 feel free to provide a new insight of how an Orb-Script should be
 
 
-FAQ : 
+FAQ : <br>
 Q : what is the idea behind glome and Orb-Script language?<br>
 A : back in 2013, i find that building SIM card application is quite hard, the only SIM card application scripting language is WIB script by SmartTrust (another scripting language is S@T by SIMAlliance), the language is hardly called scripting because it's based on WML (mark-up language similar with XML or HTML) and the scalability is quite low (it only translate generic SIM toolkit proactive command to their API), so i decide to build my own language for building SIM card application, back then the idea is based on early PHP concept for building a dynamic website at late 90s.
 
