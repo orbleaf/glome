@@ -11,6 +11,20 @@ extern vm_object * g_pVaRetval;
 extern sys_context g_sVaSysc;
 //tk_context_p g_pfrmctx = NULL;
 
+static uint8 vm_imemcmp(void * op1, void * op2, uint16 size) _REENTRANT_ {
+	uint8 * p_dst = (uint8 *)op1;
+	uint8 * p_src = (uint8 *)op2;
+	uint8 c, d;
+ 	while(size-- != 0) {
+		c = p_dst[size];
+		d = p_src[size];
+		if(c >= 'a' && c <='z') c -= 0x20;
+		if(d >= 'a' && d <='z') d -= 0x20;
+	 	if(c != d) return -1;
+	}
+	return 0;
+}
+
 CONST vm_api_entry g_vaRegisteredApis[] = {
  	//var APIs
 #if STACK_VAR_APIS
@@ -85,6 +99,7 @@ CONST vm_api_entry g_vaRegisteredApis[] = {
 	{137, "encrypt", va_crypto_encrypt, NULL },	 
 	{138, "decrypt", va_crypto_decrypt, NULL },
 	{139, "cr_random", va_random, NULL },
+	{140, "hash", va_digest, NULL },
 #endif
 #if STACK_NETWORK_APIS
 	//network APIs		(144-148)
@@ -284,8 +299,8 @@ void va_display_text() {
 	uint8 arg_count = vm_get_argument_count();
 	for(i=0;i<arg_count;i++) {
 		param = vm_get_argument(i);
-		memset(buffer, 0, sizeof(buffer));
-		strncpy(_RECAST(char *, buffer), _RECAST(const char *, param->bytes), param->len);
+		memset(buffer, 0, 255);
+		memcpy(_RECAST(char *, buffer), _RECAST(const char *, param->bytes), param->len);
 		printf("%s<br>", buffer);
 	}
 }
@@ -364,14 +379,24 @@ void va_replace() _REENTRANT_ {
 	OS_DEBUG_EXIT();
 }
 
-static uchar va_is_numeric(uchar * buffer, uchar len) _REENTRANT_ { 
+static uint8 va_arg_is_numeric(uint8 * str, uint16 len) {
+	uint16 i = 0;
 	uint8 n;
 	if(len == 0) return FALSE;
-	while(len != 0 ) {
-		n = buffer[--len];
+	for(i=0;i<len;i++) {
+		n = str[--len];
+		if((n == '-') && (len == 0)) break;
 		if(n > 0x39 || n < 0x30) { return FALSE; }
-	} 
-	return TRUE;
+	}
+	return 1;
+}
+
+static uint8 va_contain_delimiter(uint8 * str, uint16 len) {
+	uint16 i = 0;
+	for(i=0;i<len;i++) {
+		if(str[i] == VA_OBJECT_DELIMITER) return 1;
+	}
+	return 0;
 }
 
 void va_substr() _REENTRANT_ {
@@ -391,8 +416,8 @@ void va_substr() _REENTRANT_ {
 		opd2 = (uint8 *)mmAllocMemP(op2->len + 1);
 		vm_memcpy(opd1, op1->bytes, op1->len); opd1[op1->len] = 0;		//null terminated string
 		vm_memcpy(opd2, op2->bytes, op2->len); opd2[op2->len] = 0;		//null terminated string
-		if(va_is_numeric(_RECAST(uchar *, op1->bytes), op1->len) == FALSE) { offset = 0; } else { offset = atoi(_RECAST(const char *, opd1)); }			//
-		if(va_is_numeric(_RECAST(uchar *, op2->bytes), op2->len) == FALSE) { len = obj->len; } else { len = atoi(_RECAST(const char *, opd2)); }
+		if(va_arg_is_numeric(_RECAST(uchar *, op1->bytes), op1->len) == FALSE) { offset = 0; } else { offset = atoi(_RECAST(const char *, opd1)); }			//
+		if(va_arg_is_numeric(_RECAST(uchar *, op2->bytes), op2->len) == FALSE) { len = obj->len; } else { len = atoi(_RECAST(const char *, opd2)); }
 		if(len > (obj->len - offset)) len = (obj->len - offset);
 		mmFreeMem(opd1);
 		mmFreeMem(opd2);
@@ -811,24 +836,34 @@ void va_crypto_create() _REENTRANT_ {
 		//check parameter 0, supported codec
 		param = vm_get_argument(0);
 		while(c_iterator->name != NULL) {	 
-			if(vm_memcmp(param->bytes, c_iterator->name, param->len) == 0) { mode = c_iterator->mode; keylen=c_iterator->keylen; break; }
+			if(vm_imemcmp(param->bytes, c_iterator->name, param->len) == 0) { mode = c_iterator->mode; keylen=c_iterator->keylen; break; }
 			c_iterator++;
 		}
 		if(c_iterator->name == NULL) {
 			vm_invoke_exception(VX_UNIMPLEMENTED_APIS);
 			goto exit_crypto_create;
 		}
-		//check codec mode ECB/CBC
-		param = vm_get_argument(1);
-		if(vm_memcmp(param->bytes, "CBC", param->len) == 0) mode |= CR_MODE_CBC;
 		key = vm_get_argument(2);
 		keylen = key->len;
-		//mmMemSet(crCtx.icv, 0, CR_ICV_SIZE);		//clear icv
-		//crInitContext(&crCtx, g_baOrbBuffer);		//changed to context on 2015.06.14
-		//crCtx.mode = mode;	
+		//case of des, could switch to different mode by calculating key length
+		if(mode == CR_MODE_DES) {
+			if(keylen <=8) {
+				mode = CR_MODE_DES;
+			} else if(keylen <=16) {
+				mode = CR_MODE_DES2;
+			} else if(keylen <=24) {
+				mode = CR_MODE_DES3;
+			} else {
+				vm_invoke_exception(VX_UNIMPLEMENTED_APIS);
+				goto exit_crypto_create;
+			}
+		}
+		//check codec mode ECB/CBC
+		param = vm_get_argument(1);
+		if(vm_imemcmp(param->bytes, "CBC", param->len) == 0) mode |= CR_MODE_CBC;
 		objLen = sizeof(cr_context) + keylen;
 		g_pVaRetval = vm_create_object(objLen + 256, NULL);	  
-		if(g_pVaRetval->len == 0) goto exit_crypto_create;		//not enough memory, cannot allocate object
+		if(g_pVaRetval) goto exit_crypto_create;		//not enough memory, cannot allocate object
 		pctx = ((cr_context *)g_pVaRetval->bytes);
 		vm_memset(pctx, 0, objLen);					//clear context first before initializing
 		cr_init_context(pctx, (uint8 *)g_pVaRetval + objLen + (sizeof(vm_object) -1));			//changed to context on 2015.06.14
@@ -893,6 +928,54 @@ void va_random() _REENTRANT_ {
 		g_pVaRetval = vm_create_object(len, bbuf);		//return decimal value
 	}
 	//OS_DEBUG_EXIT();
+}
+
+CONST struct va_crypto_digest {
+ 	BYTE * name;
+	uint8 (* exec)(cr_context_p, uint16, uint16, uint8 *);
+	uint8 size;
+} g_vaRegisteredDigest[] = { 
+	{ (uint8 *)"CRC32", (uint8 (*)(cr_context_p, uint16, uint16, uint8 *))cr_calc_crc, 4 }, 
+	{ (uint8 *)"MD5", cr_calc_md5, 16 },
+	{ (uint8 *)"SHA1", cr_calc_sha1, 20 },
+	{ (uint8 *)"SHA256", cr_calc_sha256, 32 },	
+	{ NULL, NULL, 0 },
+};
+
+void va_digest() _REENTRANT_  {
+	//OS_DEBUG_ENTRY(va_digest);
+	uint8 bbuf[VA_OBJECT_MAX_SIZE];
+	uint8 len = 0;
+	vm_object * param;
+	vm_object * mode;
+	cr_context crx;
+	uint8 hashlen;
+	uint8 (* exec)(cr_context_p, uint16, uint16, uint8 *);
+	struct va_crypto_digest * c_iterator = (struct va_crypto_digest *)&g_vaRegisteredDigest[0]; 
+	param = vm_get_argument(0);
+	mode = vm_get_argument(1);
+	while(c_iterator->name != NULL) {	 
+		if(vm_imemcmp(mode->bytes, c_iterator->name, mode->len) == 0) { 
+			exec = c_iterator->exec; 
+			hashlen = c_iterator->size; 
+			break; 
+		}
+		c_iterator++;
+	}
+	if(c_iterator->name == NULL) {
+		vm_invoke_exception(VX_UNIMPLEMENTED_APIS);
+		goto exit_digest;
+	}
+	cr_init_context(&crx, param->bytes);
+	exec(&crx, 0, param->len, bbuf);
+	//BYTE len = va_o2f(vm_get_argument(0));			//added 2016.06.08
+	//if(len != 0) {		//return;
+		//cr_randomize(bbuf, len);
+	g_pVaRetval = vm_create_object(hashlen, bbuf);		//return decimal value
+	//}
+	//OS_DEBUG_EXIT();
+	exit_digest:
+	return;
 }
 
 #if 0 		//DEPRECATED APIS
@@ -1140,6 +1223,13 @@ void va_arg_create() _REENTRANT_ {
 	//OS_DEBUG_EXIT();
 }
 
+void dump_var(vm_object * t) {
+	uint8 buffer[256];
+	memset(buffer, 0, sizeof(buffer));
+	tk_bin2hex(t->bytes, t->len, buffer);
+	printf("dump : %s\n", buffer);
+}
+
 void va_arg_object() _REENTRANT_ {
 	//va_list ap;
 	//OS_DEBUG_ENTRY(va_arg_object);
@@ -1161,6 +1251,7 @@ void va_arg_object() _REENTRANT_ {
 		//va_start(ap, count);					/* Requires the last fixed parameter (to get the address) */
 		//obj = (vm_object *)malloc(len + sizeof(vm_object));
 		len = 2;
+		//printf("arg_obj count : %d\n", count);
 		for (j = 0; j < count; j++) {
 			//ibj = va_arg(ap, vm_object *);   
 			ibj = vm_get_argument(j);
@@ -1223,6 +1314,7 @@ void va_arg_array() _REENTRANT_ {
 		bbuf[1]= len - 2;	//'*';		//actual object content length (not incuding header)
 		//va_end(ap);
 		g_pVaRetval = vm_create_object(len, bbuf);
+		//dump_var(g_pVaRetval);
 		if(g_pVaRetval->len != 0) g_pVaRetval->mgc_refcount |= VM_OBJ_MAGIC;
 	}
 	//OS_DEBUG_EXIT();
@@ -1293,14 +1385,15 @@ void va_arg_get() _REENTRANT_ {
 
 static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _REENTRANT_ {
 	uint8 c;
-	uint8 i, plen;
 	uint8 j = 0;
 	uint8 len = 0;
 	uint8 state =0;
 	uint8 wc;
+	uint8 is_numeric = 0;
 	while(j++ < objlen && (c = *(strbuf[0])++)) {
 		switch(c) {
 			case ASN_TAG_SET:		//array		ASN_TAG_SET
+				if(len != 0 && state == 0) buffer[len++]= ',';
 				state=0;
 				buffer[len++]= '[';
 				c = *(strbuf[0])++;
@@ -1310,6 +1403,7 @@ static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _
 				buffer[len++]= ']';
 				break;
 			case ASN_TAG_SEQ:		//object	ASN_TAG_SEQ	
+				if(len != 0 && state == 0) buffer[len++]= ',';
 				state=0;
 				buffer[len++]= '{';
 				c = *(strbuf[0])++;
@@ -1319,11 +1413,11 @@ static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _
 				buffer[len++]= '}';
 				break;
 			case VA_OBJECT_DELIMITER:
+				buffer[len++]= ':';
 				if(state == 1) {
 					state++;
-					buffer[len++]= '\"';
+					//buffer[len++]= '\"';
 				}
-				buffer[len++]= ':';
 				break;
 			case ASN_TAG_OBJDESC:					//ASN_TAG_OBJDESC
 				if(state == 0) { 
@@ -1339,12 +1433,20 @@ static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _
 					if(len != 0) buffer[len++]= ',';
 					c = *(strbuf[0])++;
 					j++;
-					buffer[len++] = '\"';
-					memcpy(buffer + len, strbuf[0], c);
-					(strbuf[0]) += c;
-					len += c;
-					j+=c;
-					buffer[len++] = '\"';
+					if(va_arg_is_numeric(strbuf[0], c)) {
+						//numeric doesn't need for quote
+						memcpy(buffer + len, strbuf[0], c);
+						(strbuf[0]) += c;
+						len += c;
+						j += c;
+					} else {
+						buffer[len++] = '\"';
+						memcpy(buffer + len, strbuf[0], c);
+						(strbuf[0]) += c;
+						len += c;
+						j += c;
+						buffer[len++] = '\"';
+					}
 				}
 				break;
 			case ' ': 
@@ -1355,8 +1457,16 @@ static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _
 					state++;
 					if(state == 2 && c >='0' && c <='9') {
 						state=4;		//numeric state
-					} else 
-						buffer[len++]= '\"';
+					} else {
+						//check for delimiter ahead
+						if(!va_contain_delimiter(strbuf[0]-1, objlen-(j-1))) {
+							is_numeric = 0;
+							if(!va_arg_is_numeric(strbuf[0]-1, objlen-(j-1)))
+								buffer[len++]= '\"';
+							else 
+								is_numeric = 1;
+						}
+					}
 				}
 				switch(c) {
 					case '\"': wc = '\"'; goto push_spchar;
@@ -1378,7 +1488,7 @@ static uint8 va_arg_serialize_s(uint8 * buffer, uint8 ** strbuf, uint8 objlen) _
 				break;
 		}
 	}
-	if((state & 0x01) != 0) buffer[len++]= '\"';
+	if((state & 0x01) != 0 && is_numeric == 0) buffer[len++]= '\"';
 	return len;
 }
 
@@ -1401,8 +1511,10 @@ static uint8 va_arg_deserialize_s(uint8 * buffer, uint8 ** strbuf, uint8 slen, u
 	uint8 len = 0;
 	uint8 ilen;
 	uint8 state =0;
-	uint8 ldx;
-	uint8 klen=0;
+	uint8 ldx = 0;
+	uint8 klen = 0;
+	uint8 sv_state;
+	uint8 quote=0;
 	while(index[0]++ < slen && (c = *(strbuf[0])++)) {
 		switch(c) {
 			case '[':		//start array
@@ -1410,53 +1522,68 @@ static uint8 va_arg_deserialize_s(uint8 * buffer, uint8 ** strbuf, uint8 slen, u
 				ilen = va_arg_deserialize_s(buffer + len + 1, strbuf, slen, index);
 				buffer[len++] = ilen;
 				len += ilen;
+				if(state >= 2) { klen += (ilen + 2); buffer[ldx] = klen; state++; }
 				break;
 			case '{':		//start object
 				buffer[len++] = ASN_TAG_SEQ;
 				ilen = va_arg_deserialize_s(buffer + len + 1, strbuf, slen, index);
 				buffer[len++] = ilen;
 				len += ilen;
+				if(state >= 2) { klen += (ilen + 2); buffer[ldx] = klen; state++; }
 				break;
 			case '}':		//end object
 			case ']':		//end array
+				if(klen != 0) buffer[ldx] = klen;
 			case 0:			//end string
 				return len;
 			case '\"':		//start key-value
 				switch(state) {
-					case 0: buffer[len++]=ASN_TAG_OBJDESC; ldx = len++; klen = 0; break;
-					case 1: buffer[ldx] = klen; break;
-					case 2: break;
-					case 3: buffer[ldx] = klen; break;
+					case 0: buffer[len++]=ASN_TAG_OBJDESC; ldx = len++; buffer[ldx] = 0; klen = 0; quote =1; break;
+					case 1: buffer[ldx] = klen; quote=0; break;
+					case 2: quote = 1; break;
+					case 3: buffer[ldx] = klen;  quote=0; break;
 					case 4: goto reset_state;
 				}
 				state++;
 				break;
 			case ',':
-				if(state != 1 || state != 3) { 			//don't skip comma when inside quotation mark
+				if(quote == 0) { 
+					if(klen == 0) {			//case [,,]	-> double comma
+						buffer[len++]=ASN_TAG_OBJDESC; 
+						ldx = len++; 
+					}
+					buffer[ldx] = klen;
+					klen = 0; 
+					quote=0;
 					state = 0;
-				} else goto push_char;
+					goto reset_state;
+				}
+				if(state != 1) goto push_char;
 				break;
 			case ':':
+				if (state == 1) {
+					buffer[ldx] = klen;
+					state = 2;
+				}
+				if(state < 3) { c = VA_OBJECT_DELIMITER; }
 			default:
+				if(state == 0) { buffer[len++]=ASN_TAG_OBJDESC; ldx = len++; buffer[ldx] = 0; klen = 0; quote =0; state++; }
+				if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || (c>='0' && c<='9'))	//start of key/value
+				{
+					if (state == 2) state++;
+				}
 			push_char:
 				klen++;
 				buffer[len++] = c;
-				if(state == 2) {					   //fixed for "key":number		(2017.06.07)
-					if(c >= '0' && c <= '9') state=4;
-				}
-				if(state == 4) {
-				 	if(c >= '0' && c <= '9') 
-						buffer[ldx] = klen;
-					else 
-						goto reset_state;
-				}
 				break;
-			case ' ': 
-				if(state == 1 || state == 3) goto push_char; 		//inside quotation mark
+			case ' ': 				//skip whitespace
+				//if(state == 1 || state == 3) goto push_char; 		//inside quotation mark
+				if(quote) { if(quote) goto push_char; }		//ignore
 				if(state == 4) {  
 			reset_state:
 					state = 0;
 				}
+				if(state == 1) {  }		//ignore
 				break;	//skip white space
 		}
 	}
@@ -1470,6 +1597,7 @@ void va_arg_deserialize() _REENTRANT_ {	//-> from json string
 	uint8 bbuf[VA_OBJECT_MAX_SIZE];	
 	vm_object * obj = vm_get_argument(0);
 	uint8 * tptr = obj->bytes;	   
+	//printf("deserialize\n");
 	dlen = va_arg_deserialize_s(bbuf, &tptr, obj->len, &t);
 	g_pVaRetval = vm_create_object(dlen, bbuf);
 	if(g_pVaRetval->len != 0) g_pVaRetval->mgc_refcount |= VM_OBJ_MAGIC;
@@ -1486,6 +1614,9 @@ void va_arg_set_operation(vm_object * obj, vm_object * key, vm_object * val) _RE
 	uint8 cntr = 0;
 	uint8 dlen = 0;		
 	uint8 bbuf[VA_OBJECT_MAX_SIZE];	
+	//dump_var(obj);
+	//dump_var(key);
+	//dump_var(val);
 	if(obj->len == 0) goto exit_arg_set;
 	if(obj->bytes[0] != ASN_TAG_SET && obj->bytes[0] != ASN_TAG_SEQ ) goto exit_arg_set;		//invalid array/object mark	  
 	if(vm_is_numeric(key->bytes, key->len)) index = va_o2f(key);
@@ -1531,8 +1662,10 @@ void va_arg_set_operation(vm_object * obj, vm_object * key, vm_object * val) _RE
 	bbuf[1] = (dlen - 2);										//set object to new length
 	//return on context	
 	g_pVaRetval = vm_create_object(dlen, bbuf); 
+	//printf("obj->len : %d\n", g_pVaRetval->len);
 	if(g_pVaRetval->len != 0) {
 		g_pVaRetval->mgc_refcount = VM_OBJ_MAGIC | ((obj->mgc_refcount + 1) & 0x0F);		//copy header bytes, set to object in case didn't
+		//printf("update mutator\n");
 		vm_update_mutator(obj, g_pVaRetval);						//update mutator
 		obj->mgc_refcount &= 0xF0;									//clear refcount
 		vm_release_object(obj);										//release header

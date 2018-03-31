@@ -9,6 +9,7 @@
 #include "../libcgi/src/cgi.h"
 #include "../libcgi/src/error.h"
 #endif
+#include "../stack/pkg_linker.h"
 #include "../stack/asm_streamer.h"
 #include <stdio.h>
 
@@ -17,7 +18,7 @@ void vi_register_system_apis() {
 	//BYTE i;
 	vm_api_entry * iterator = (vm_api_entry *)&g_vaRegisteredApis;
 	while(iterator->id != 0) {
-		printf("install api %s : %d\r\n", iterator->name, iterator->id);
+		//printf("install api %s : %d\r\n", iterator->name, iterator->id);
 		sp_install_api(iterator->name, iterator->id, 0);
 		iterator++;
 	} 
@@ -42,15 +43,19 @@ class program {\r\n\
 	var w=\"\";\r\n\
 	var t = new c1();\r\n\
 	t->x1(function(tx) { print(tx); });	\r\n\
-	var jstr = [ \"pen\":1, \"apple\", \"human\" ];\r\n\
-        var my_array = jstr.from_json();\r\n\
-		for(var i=0;i<7;i++) print(i);\r\n\
+	var jstr = { head:{ eyes : 2} , limbs : { hands:2, legs:2, neck:1 } };\r\n\
+        var my_array = jstr;\r\n\
+		print(jstr.to_hex());\r\n\
+		print(jstr.to_json());\r\n\
+		//my_array.pen.pencil = {\"pencil\":2};\r\n\
+		//for(var i=0;i<7;i++) print(i);\r\n\
 		//var my_array = [\"apple\", \"orange\"];\r\n\
         //print(my_array.to_hex());\r\n\
         //print(my_array.to_json().from_json().to_hex());\r\n\
         print(\"number of objects : \" + my_array.count());\r\n\
         print(\"array 1: \" + my_array[1]);\r\n\
         my_array.add(\"pineapple\");\r\n\
+		print(my_array.to_hex());\r\n\
         print(my_array.to_json());\r\n\
 		//foreach(my_array, function(t) {\r\n\
 		//	print(t);\r\n\
@@ -81,7 +86,7 @@ int main() {
 	cgi_init_headers();
 	//_istream_code_size = 0;
 	if(cgi_param("script")) {
-		source = cgi_param("script);
+		source = cgi_param("script");
 	} else {
 		printf("Orb-Weaver %d.%d CGI Interpreter <br>", IS_MAJOR_VERSION, IS_MINOR_VERSION);
 		printf("Copyright 2018 @ Orbleaf Technology<br>");
@@ -109,7 +114,9 @@ int main() {
 		//memcpy(_RECAST(uchar *, ptr) + headersize, _istream_code_buffer, _istream_code_size);
 		//_istream_code_size = 0;
 		lk_set_root(pk_get_root());
+#ifndef CGI_APPLICATION
 		lk_dump_classes();
+#endif
 		//iterator = as_get_enumerator();
 		//while(iterator != NULL) {
 			//lstStream->WriteLine(gcnew String(_RECAST(const char *, iterator->buffer)));
