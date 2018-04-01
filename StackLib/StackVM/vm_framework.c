@@ -1515,28 +1515,37 @@ static uint8 va_arg_deserialize_s(uint8 * buffer, uint8 ** strbuf, uint8 slen, u
 	uint8 klen = 0;
 	uint8 sv_state;
 	uint8 quote=0;
+	
 	while(index[0]++ < slen && (c = *(strbuf[0])++)) {
 		switch(c) {
 			case '[':		//start array
+                if (quote == 1) goto push_char;
 				buffer[len++] = ASN_TAG_SET;
 				ilen = va_arg_deserialize_s(buffer + len + 1, strbuf, slen, index);
 				buffer[len++] = ilen;
 				len += ilen;
 				if(state >= 2) { klen += (ilen + 2); buffer[ldx] = klen; state++; }
+				state = 0;
 				break;
 			case '{':		//start object
+                if (quote == 1) goto push_char;
 				buffer[len++] = ASN_TAG_SEQ;
 				ilen = va_arg_deserialize_s(buffer + len + 1, strbuf, slen, index);
 				buffer[len++] = ilen;
 				len += ilen;
 				if(state >= 2) { klen += (ilen + 2); buffer[ldx] = klen; state++; }
+				state = 0;
 				break;
 			case '}':		//end object
 			case ']':		//end array
-				if(klen != 0) buffer[ldx] = klen;
+                if (quote == 1) goto push_char;		//inside quote
+				if(klen != 0) buffer[ldx] = klen;		//
 			case 0:			//end string
 				return len;
 			case '\"':		//start key-value
+				if(quote == 1) {
+					if(len != 0 && buffer[len-1] == '\\') goto push_char;
+				}
 				switch(state) {
 					case 0: buffer[len++]=ASN_TAG_OBJDESC; ldx = len++; buffer[ldx] = 0; klen = 0; quote =1; break;
 					case 1: buffer[ldx] = klen; quote=0; break;
