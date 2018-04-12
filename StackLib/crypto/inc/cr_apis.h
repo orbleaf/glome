@@ -70,6 +70,10 @@ void cr_aes_decode(BYTE* dst, BYTE* key, BYTE * src) _REENTRANT_;
 uint16 cr_do_crypt(cr_context_p ctx, WORD offset, WORD length) _REENTRANT_ ; 
 uint32 cr_calc_crc(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_ ;
 BYTE cr_calc_mac(cr_context_p ctx, WORD offset, WORD length, BYTE * result) _REENTRANT_ ;
+uint8 cr_calc_sha1(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_ ;
+uint8 cr_calc_md5(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_;
+uint8 cr_calc_sha256(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_;
+uint8 cr_calc_lrc(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_ ;
 
 //pandora APIs (key generator)
 uint16 cr_gen_lrc(char * key, uint8 length) _REENTRANT_ ;

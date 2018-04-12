@@ -231,8 +231,8 @@ for_stmt: /* empty */
 	for_expr_stmt { symrec * rec = sp_pop_symrec(); rec = sp_pop_symrec(); sp_new_label(rec->name); }
 ;
 for_init_stmt: /* empty */ { sp_push_symrec(sp_create_label(_RECAST(uchar *,"__fv"))); /* dummy variable */ }
-| lazy_stmt ',' for_init_stmt { sp_clear_current_scope(); }
-| lazy_stmt { sp_clear_current_scope(); }
+| lazy_stmt ',' for_init_stmt { sp_flush_scope(); sp_clear_current_scope(); }
+| lazy_stmt { sp_flush_scope(); sp_clear_current_scope(); }
 | P_VAR inline_var_decl { sp_clear_operation_stack(); sp_lhs_clear(); }
 ;
 for_expr_stmt: L_BR for_init_stmt EOS { sp_flush_scope(); sp_clear_current_scope(); sp_pop_symrec(); sp_start_loop(); }
@@ -262,15 +262,15 @@ assignment: lhs_val S_EQ { sp_flush_scope(); sp_lhs_clear(); sp_set_scope_var(sp
 | VARIABLE S_ADDADD { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1)); sp_set_scope_var(sp_peek_symrec()); sp_lz_constant_after_scope($1, _RECAST(uchar *, "1"), INS_ADD); }
 | VARIABLE S_SUBSUB { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1)); sp_set_scope_var(sp_peek_symrec()); sp_lz_constant_after_scope($1, _RECAST(uchar *, "1"), INS_SUB); }
 ;
-rhs_val: rhs_val S_PDOT VARIABLE L_BR { printf("rhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
-| rhs_val S_PDOT VARIABLE { printf("rhs object access\n"); sp_lz_load_constant($3); $$=18; sp_push_symrec(sp_lhs_load(18, sp_pop_symrec())); }
-| rhs_val L_SB lazy_expr R_SB { printf("rhs array access\n"); sp_pop_symrec(); $$=17; sp_push_symrec(sp_lhs_load(17, sp_pop_symrec())); }
+rhs_val: rhs_val S_PDOT VARIABLE L_BR { sm_printf("rhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
+| rhs_val S_PDOT VARIABLE { sm_printf("rhs object access\n"); sp_lz_load_constant($3); $$=18; sp_push_symrec(sp_lhs_load(18, sp_pop_symrec())); }
+| rhs_val L_SB lazy_expr R_SB { sm_printf("rhs array access\n"); sp_pop_symrec(); $$=17; sp_push_symrec(sp_lhs_load(17, sp_pop_symrec())); }
 | lazy_val { $$=0; }
 ;
-lhs_val: lhs_val S_PDOT VARIABLE { sp_lhs_get($1); printf("lhs object access\n"); sp_lz_load_constant($3); $$=18; sp_lhs_set(18); }
-| lhs_val L_SB { sp_lhs_get($1); } lazy_expr R_SB { printf("lhs array access\n"); sp_pop_symrec(); $$=17; sp_lhs_set(17); }
-| lhs_val S_PDOT VARIABLE L_BR { sp_lhs_get($1); printf("lhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
-| VARIABLE { printf("push %s\n", $1); sp_lhs_store(sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1))); $$=0; } 
+lhs_val: lhs_val S_PDOT VARIABLE { sp_lhs_get($1); sm_printf("lhs object access\n"); sp_lz_load_constant($3); $$=18; sp_lhs_set(18); }
+| lhs_val L_SB { sp_lhs_get($1); } lazy_expr R_SB { sm_printf("lhs array access\n"); sp_pop_symrec(); $$=17; sp_lhs_set(17); }
+| lhs_val S_PDOT VARIABLE L_BR { sp_lhs_get($1); sm_printf("lhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
+| VARIABLE { sm_printf("push %s\n", $1); sp_lhs_store(sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1))); $$=0; } 
 ;
 //| lhs_val { sp_push_symrec(sp_lhs_load($1, sp_peek_symrec())); $$=0; }
 lazy_expr: L_BR lazy_stmt R_BR { symrec * rec = sp_peek_symrec(); sp_lz_load_variable(rec->name); }
@@ -300,7 +300,7 @@ lazy_val: L_BR { sp_create_new_scope(NULL); } lazy_expr R_BR { sp_flush_scope();
 | constant_val { sp_push_symrec(sp_lz_load_constant($1)); }
 ;
 lazy_func_call: instance_expr S_RNEXT VARIABLE L_BR { sp_push_symrec(sp_start_method_call($3)); } method_param_list R_BR { symrec * meth = sp_pop_symrec(); sp_push_symrec(sp_lz_load_variable($1)); sp_push_symrec(sp_end_method_call(sp_pop_symrec(), meth)); }
-| VARIABLE L_BR { symrec * rec = sp_push_symrec(sp_start_function_call($1, 0)); printf("start call func: %s\n",rec->name); } call_param_list R_BR { symrec * rec = sp_peek_symrec(); printf("end call func: %s\n",rec->name); sp_end_function_call(rec); }
+| VARIABLE L_BR { symrec * rec = sp_push_symrec(sp_start_function_call($1, 0)); sm_printf("start call func: %s\n",rec->name); } call_param_list R_BR { symrec * rec = sp_peek_symrec(); sm_printf("end call func: %s\n",rec->name); sp_end_function_call(rec); }
 ;
 //| api_func_call { sp_pop_symrec(); }
 //;

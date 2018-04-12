@@ -952,7 +952,7 @@ void sp_push_operation(uint16 api_id, uint8 num_args) {
 
 void sp_clear_operation_stack() {
 	_op_index = 0;
-	printf("symstack : %d, op : %d\n", _sp_symstack_index, _op_index);
+	sm_printf("symstack : %d, op : %d\n", _sp_symstack_index, _op_index);
 }
 
 void sp_end_expr(symrec * rec) {
@@ -1357,7 +1357,7 @@ void sp_import_package(uchar * pkgname) {
 	for(i = 0;i<strlen(_RECAST(const char *,buffer)); i++) {
 		if(buffer[i] == '.') buffer[i] = '\\';
 	}
-	printf("import %s\n", buffer);
+	sm_printf("import %s\n", buffer);
 	lk_import_directory(buffer);
 }
 
@@ -1543,14 +1543,14 @@ symrec * sp_start_lambda_body(symrec * func) {
 		}  else {
 			//function already defined
 			//printf("function already defined\n");
-			printf(_RECAST(char *, SP_ERR_MULTI_FUNCTION), func->name);
+			sm_printf(_RECAST(char *, SP_ERR_MULTI_FUNCTION), func->name);
 			fflush(0);
 			sp_error(SP_ERR_MULTI_FUNCTION, func->name);
 			return NULL;
 		} 
 	} else {
 		//printf("function not existed\n");
-		printf(_RECAST(char *, SP_ERR_INVALID_LAMBDA_DECL), func->name);
+		sm_printf(_RECAST(char *, SP_ERR_INVALID_LAMBDA_DECL), func->name);
 		sp_error(SP_ERR_INVALID_LAMBDA_DECL, func->name);
 		return NULL;
 	}

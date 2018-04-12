@@ -938,7 +938,8 @@ CONST struct va_crypto_digest {
 	{ (uint8 *)"CRC32", (uint8 (*)(cr_context_p, uint16, uint16, uint8 *))cr_calc_crc, 4 }, 
 	{ (uint8 *)"MD5", cr_calc_md5, 16 },
 	{ (uint8 *)"SHA1", cr_calc_sha1, 20 },
-	{ (uint8 *)"SHA256", cr_calc_sha256, 32 },	
+	{ (uint8 *)"SHA256", cr_calc_sha256, 32 },
+	{ (uint8 *)"LRC", cr_calc_lrc, 1 },	
 	{ NULL, NULL, 0 },
 };
 

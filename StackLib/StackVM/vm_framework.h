@@ -163,6 +163,7 @@ void va_crypto_create() _REENTRANT_ ;
 void va_crypto_encrypt() _REENTRANT_ ; 
 void va_crypto_decrypt() _REENTRANT_ ;
 void va_random() _REENTRANT_ ;
+void va_digest() _REENTRANT_ ;
 //security
 void va_verify_pin() _REENTRANT_ ;
 //toolkit manager			  

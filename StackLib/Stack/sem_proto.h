@@ -28,6 +28,8 @@
 #define SP_ERR_NESTED_ACCESS		_RECAST(uchar *, "Nested access not supported %s")		
 #define SP_ERR_PARSER				_RECAST(uchar *, "Semantic error: %s, %s")
 
+#define sm_printf				
+
 #define SEM_MAX_STACK		64
 
 typedef struct err_record {

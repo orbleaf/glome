@@ -61,6 +61,21 @@ void cr_randomize(uint8 * buffer, uint16 len) {
 	}
 }
 
+uint8 cr_calc_lrc(cr_context_p ctx, uint16 offset, uint16 length, uint8 * result) _REENTRANT_ {
+	uint8 b = 0;
+	uint16 ii;
+	uchar jj;
+	uchar buffer[16];
+	for(ii = 0; ii < length; ii+=16) {
+		ctx->read(ctx->handle, offset+ii, buffer, 16);
+		for(jj = 0 ;jj < 16 && (ii+jj) < length; jj++) {
+			b ^= buffer[jj];
+		}
+	}
+	result[0] = b;
+	return 1;
+}
+
 void cr_xor(uint8 * mask, uint8 * buffer, uint16 len) {
 	uint8 i=0;
 	for(i=0;i<len;i++) buffer[i] ^= mask[i];
