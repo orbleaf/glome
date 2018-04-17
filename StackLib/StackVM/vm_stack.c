@@ -20,7 +20,7 @@ using namespace System::Runtime::InteropServices;
 
 BYTE _vm_current_api = 0;
 
-#define VM_MAX_STACK_SIZE		32
+#define VM_MAX_STACK_SIZE		64
 //#define VM_CODEDEBUG		1
 #ifdef STANDALONE_VIRTUAL_MACHINE
 FILE * _ilfile = NULL;
@@ -246,6 +246,7 @@ uchar vm_is_numeric(uchar * buffer, uchar len) {
 	if(len == 0) return FALSE;
 	while(len != 0 ) {
 		n = buffer[--len];
+		if((n == '-') && (len == 0)) break;
 		if(n > 0x39 || n < 0x30) { return FALSE; }
 	} 
 	return TRUE;
@@ -272,7 +273,7 @@ vm_object * vm_split_object(vm_object * op2, vm_object * op1, vm_object * target
 }
 
 vm_object * vm_operation_object(uchar opcode, vm_object * op2, vm_object * op1) {
-	uint32 value1, value2;
+	int32 value1, value2;
 	uchar * buffer = NULL;
 	uchar * obj;
 	if(vm_is_numeric(op1->bytes, op1->len) == TRUE && vm_is_numeric(op2->bytes, op2->len) == TRUE) {		//number
@@ -287,7 +288,13 @@ vm_object * vm_operation_object(uchar opcode, vm_object * op2, vm_object * op1) 
 			case INS_ADD: value1 = value1 + value2; break;
 			case INS_SUB: value1 = value1 - value2; break;
 			case INS_MUL: value1 = value1 * value2; break;
-			case INS_DIV: value1 = value1 / value2; break;
+			case INS_DIV: 
+				if(value2 == 0) {
+					vm_invoke_exception(VX_DIV_BY_ZERO);
+					break;
+				}
+				value1 = value1 / value2; 
+				break;
 			default: break;
 		}
 		sprintf(_RECAST(char *, buffer), "%i", value1);
@@ -457,6 +464,12 @@ uchar vm_get_argument_count() {
 #define VTXT_UNIMPLEMENTED_APIS			"\x04Unimplemented APIs"
 #define VTXT_SYSTEM_EXCEPTION			"\x04System Exception" 
 #define VTXT_STACK_UNDERFLOW			"\x04Stack Underflow"
+#define VTXT_OUT_OF_BOUNDS				"\x04Out of Bounds"	 
+#define VTXT_UNRESOLVED_CLASS			"\x04Unresolved Class"
+#define VTXT_UNRESOLVED_METHOD			"\x04Unresolved Method"
+#define VTXT_ARGUMENT_MISMATCH			"\x04Argument Mismatch"
+#define VTXT_INVALID_CONTEXT			"\x04Invalid Context"
+#define VTXT_DIVIDE_BY_ZERO				"\x04Divide by Zero"
 
 static uchar * _vm_exception_text[] = {	
 	_RECAST(uchar *, VTXT_SYSTEM_EXCEPTION), 
@@ -464,7 +477,13 @@ static uchar * _vm_exception_text[] = {
 	_RECAST(uchar *, VTXT_UNKNOWN_INSTRUCTION), 
 	_RECAST(uchar *, VTXT_STACK_OVERFLOW),
   	_RECAST(uchar *, VTXT_INSUFFICIENT_HEAP), 
-	_RECAST(uchar *, VTXT_STACK_UNDERFLOW)
+	_RECAST(uchar *, VTXT_STACK_UNDERFLOW),
+	_RECAST(uchar *, VTXT_OUT_OF_BOUNDS),
+	_RECAST(uchar *, VTXT_UNRESOLVED_CLASS),
+	_RECAST(uchar *, VTXT_UNRESOLVED_METHOD),
+	_RECAST(uchar *, VTXT_ARGUMENT_MISMATCH),
+	_RECAST(uchar *, VTXT_INVALID_CONTEXT),
+	_RECAST(uchar *, VTXT_DIVIDE_BY_ZERO),
 };	
 
 void vm_set_state(uchar state) {
