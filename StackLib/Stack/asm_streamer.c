@@ -66,7 +66,7 @@ void as_init(uchar * inpath) {
 
 void as_print(uint32 offset, uchar * str, ...) {
 //#if STANDALONE_COMPILER
-	uchar buffer[256];
+	uchar buffer[4096];
 	if(offset >= _current_offset) {
 		if(_asmfile != NULL) {
 			fprintf(_asmfile, "%04x:%s\n", offset, str);
@@ -82,7 +82,7 @@ void as_info(uchar * str) {
 //#if STANDALONE_COMPILER
 	uchar i=0;
 	uchar * iterator = str;
-	uchar buffer[256];
+	uchar buffer[4096];
 	memset(buffer, 0, sizeof(buffer));
 	if(_asmfile != NULL) {
 		fputc(';', _asmfile);

@@ -4,13 +4,16 @@
 typedef struct token /* The Semantic Records */
 {
 	int length;
-	uchar bytes[256]; /* Identifiers */
+	uchar bytes[4096]; /* Identifiers */
 } yytoken;
 
 /* symbol */
 #define VARIABLE	257		//foo, a, index, label		--> variable
 #define CONSTANT	258		//"asda", {0,0,0}			--> constant value
-#define ARRAY		259		//bytes
+#define N_CONSTANT	259		//negative constant
+#define NUMERIC		261		//number
+#define N_NUMERIC	262		//negative numeric
+#define ARRAY		260		//bytes
 
 #define P_VAR		300		//string
 #define P_NEW		301
@@ -78,6 +81,14 @@ typedef struct token /* The Semantic Records */
 #define S_MODEQ		462
 #define S_RNEXT		470
 #define S_PDOT		471
+#define S_AND		472
+#define S_OR		473
+#define S_XOR		474
+#define S_NOT		475
+#define S_ANDEQ		476
+#define S_OREQ		477
+#define S_XOREQ		478
+
 extern int yylex();
 #define _TOKEN__H
 #endif

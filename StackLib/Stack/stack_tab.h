@@ -2,9 +2,15 @@
 #include "../defs.h"
 #include "token.h"
 
+typedef struct array {
+	uint16 length;
+	uchar value[4096];
+} array;
+
 typedef union semrec 
 {
-	uchar bytes[257];
+	uchar string[4096];
+	array bytes;
 	yytoken token;
 } YYSTYPE;
 

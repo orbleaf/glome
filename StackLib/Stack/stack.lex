@@ -36,7 +36,8 @@ C-libraries and Token definitions
 		p_config = lp_pop_config();\
 	}\
 	result = n; \
-	/*printf("%s\n", buf);*/\
+	/*buf[n]=0;\
+	printf("%s\n", buf);*/\
 	if(result<=0) result=YY_NULL; \
 }
 
@@ -52,7 +53,8 @@ TOKEN Definitions
 LETTER ([ !#-ÿ]|\\.|[^\\"])*
 ALPHABET [_A-Za-z0-9]*
 HEX [A-Fa-f0-9]*
-NUMBER [0-9]*
+NUMBER (([0-9]*)(\.[0-9]*)?)|(\.?[0-9]*)
+/*NUMBER [0-9]*  */
 /*=========================================================================
 REGULAR EXPRESSIONS defining the tokens for the Simple language
 =========================================================================*/
@@ -110,16 +112,16 @@ REGULAR EXPRESSIONS defining the tokens for the Simple language
 	asm			{ BEGIN(ASSEMBLER_SECTION); }
 	endasm		{ BEGIN(INITIAL); }
 	\"{LETTER}\" { 
-		uchar buffer[256];
+		uchar buffer[4096];
 		uint16 length;
-		memset(buffer, 0, 256);
+		memset(buffer, 0, sizeof(buffer));
 		memcpy(buffer, yytext + 1, strlen(yytext) - 2);
 		length = lp_unescape(buffer, buffer);
 		lp_process_token(buffer, length);
 	}
 	\<{LETTER}\> { 
-		uchar buffer[256];
-		memset(buffer, 0, 256);
+		uchar buffer[4096];
+		memset(buffer, 0, sizeof(buffer));
 		memcpy(buffer, yytext + 1, strlen(yytext) - 2);
 		lp_process_token(buffer, strlen((const char *)buffer));
 	}
@@ -127,8 +129,8 @@ REGULAR EXPRESSIONS defining the tokens for the Simple language
 		lp_process_token(_RECAST(uchar *, yytext), strlen(_RECAST(const char *, yytext)));
 	}
 	0x{HEX} { 				
-		char buffer[256];	
-		memset(buffer, 0, 256);
+		char buffer[1024];	
+		memset(buffer, 0, sizeof(buffer));
 		sprintf(buffer, "%i", lp_hex2integer(yytext + 2));
 		lp_process_token((uchar *)buffer, strlen((const char *)buffer));
 	}
@@ -162,6 +164,9 @@ REGULAR EXPRESSIONS defining the tokens for the Simple language
 "*="		{ return S_MULEQ; }
 "/="		{ return S_DIVEQ; }
 "%="		{ return S_MODEQ; }
+"&="		{ return S_ANDEQ; }
+"|="		{ return S_OREQ; }
+"^="		{ return S_XOREQ; }
 
 "=="		{ return T_EQ; }
 "&&"		{ return T_AND; }	//type and
@@ -183,6 +188,10 @@ REGULAR EXPRESSIONS defining the tokens for the Simple language
 "*"			{ return S_MUL; }
 "/"			{ return S_DIV; }
 "%"			{ return S_MOD; }
+"&"			{ return S_AND; } 	
+"|"			{ return S_OR; } 	
+"^"			{ return S_XOR; }
+"!"			{ return S_NOT; }
 "[" 		{ return L_SB; }	//left square bracket
 "]" 		{ return R_SB; } 	//right square bracket
 "->"		{ return S_RNEXT; }
@@ -221,48 +230,63 @@ private 	{ return P_PRIVATE; }
 protected	{ return P_PROTECTED; }
 
 \"{LETTER}\" { 
-	char buffer[256];
+	char buffer[4096];
 	uint16 length;
-	memset(buffer, 0, 256);
+	memset(buffer, 0, sizeof(buffer));
 	memcpy(buffer, yytext + 1, strlen(yytext) - 2);
-	memset(yylval.bytes, 0, sizeof(yylval.bytes));
-	length = lp_unescape(_RECAST(uchar *, yylval.bytes), _RECAST(uchar *, buffer));
+	memset(yylval.string, 0, sizeof(yylval.string));
+	length = lp_unescape(_RECAST(uchar *, yylval.bytes.value), _RECAST(uchar *, buffer));
+	yylval.bytes.length = length;
 	return CONSTANT; 
 }
 
 \/\/		{ BEGIN(LINE_COMMENT_SECTION); }
 
-{NUMBER} { 				
+{NUMBER} { 			
 	char buffer[256];	
-	memset(buffer, 0, 256);
+	memset(buffer, 0, sizeof(buffer));
 	memcpy(buffer, yytext, strlen(yytext));
-	memcpy((uchar *)(yylval.bytes), buffer, strlen(buffer) + 1);
+	memcpy((uchar *)(yylval.bytes.value), buffer, strlen(buffer) + 1);
+	yylval.bytes.length = strlen(buffer);
+	if(strstr(buffer, ".") != NULL) return NUMERIC;
 	return CONSTANT; 
 }
 
-0x{HEX} { 				
+-{NUMBER} { 				
 	char buffer[256];	
+	memset(buffer, 0, sizeof(buffer));
+	memcpy(buffer, yytext, strlen(yytext));
+	memcpy((uchar *)(yylval.bytes.value), buffer, strlen(buffer) + 1);
+	yylval.bytes.length = strlen(buffer);
+	if(strstr(buffer, ".") != NULL) return N_NUMERIC;
+	return N_CONSTANT;
+}
+
+0x{HEX} { 				
+	char buffer[1024];	
 	memset(buffer, 0, 256);
 	sprintf(buffer, "%i", lp_hex2integer(yytext + 2));
-	memcpy((uchar *)(yylval.bytes), buffer, strlen(buffer) + 1);
+	memcpy((uchar *)(yylval.bytes.value), buffer, strlen(buffer) + 1);
+	yylval.bytes.length = strlen(buffer);
 	return CONSTANT; 
 }
 
 {ALPHABET} {	
 	pp_const * pconst = NULL;
 	symrec * var = NULL;
-	char buffer[256];
+	char buffer[4096];
 	uint32 offset = 0;
 	pconst = lp_select(_RECAST(uchar *, yytext));			/* select from preprocessor constants */
 	if(pconst == NULL) {
-		memset(buffer, 0, 256);
+		memset(buffer, 0, sizeof(buffer));
 		memcpy(buffer, yytext, strlen(yytext));
-		memcpy((uchar *)(yylval.bytes), buffer, strlen(buffer) + 1);
+		memcpy((uchar *)(yylval.string), buffer, strlen(buffer) + 1);
 		return VARIABLE;
 	} else {							/* preprocessor constant found */
-		memset(buffer, 0, 256);
-		memcpy(buffer, pconst->value, strlen(_RECAST(const char *, pconst->value)) + 1);
-		memcpy(_RECAST(uchar *, yylval.bytes), buffer, strlen(_RECAST(const char *, buffer)) + 1);
+		memset(buffer, 0, sizeof(buffer));
+		memcpy(buffer, pconst->value, pconst->length);
+		memcpy(_RECAST(uchar *, yylval.bytes.value), buffer, pconst->length);
+		yylval.bytes.length = pconst->length;
 		return CONSTANT;
 	}	
 }

@@ -23,6 +23,10 @@
 #define INS_MUL		34	//-> multiplication
 #define INS_DIV		35	//-> division
 #define INS_MOD		36	//-> modulus
+#define INS_AND		40	//-> and operation
+#define INS_OR		41	//-> or operation
+#define INS_XOR		42	//-> xor operation
+#define INS_NOT		43	//-> not operation
 
 #define INS_END		60	//-> end function			(pseudo instruction)
 #define INS_FUNC	61	//-> create function		(pseudo instruction)
@@ -134,7 +138,7 @@ extern uchar _istream_code_buffer[MAX_BUFFER_SIZE];
 extern uchar _istream_data_buffer[MAX_BUFFER_SIZE];
 
 void is_init(uchar * inpath);
-uint32 is_push_constant(uchar size, uchar * value) ;
+uint32 is_push_constant(uint16 size, uchar * value) ;
 uint32 is_gencode(uint32 offset, uchar opcode, ...);
 void is_link_optimize(uchar mode);
 void is_file_flush();

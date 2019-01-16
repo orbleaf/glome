@@ -47,12 +47,21 @@ void is_init(uchar * inpath) {		//original input file path as parameter
 #endif
 }
 
-uint32 is_push_constant(uchar size, uchar * value) {
+uint32 is_push_constant(uint16 size, uchar * value) {
 	uint16 retval = _cpindex;
-	_istream_data_buffer[_cpindex++] = size;
+	if(size < 128) {
+		_istream_data_buffer[_cpindex++] = size;
+	} else if(size < 256) {
+		_istream_data_buffer[_cpindex++] = 0x81;
+		_istream_data_buffer[_cpindex++] = size;
+	} else if(size < 65536) {
+		_istream_data_buffer[_cpindex++] = 0x82;
+		_istream_data_buffer[_cpindex++] = (size >> 8);
+		_istream_data_buffer[_cpindex++] = size & 0xFF;
+	}
 	memcpy(_istream_data_buffer + _cpindex, value, size);
 	_cpindex += size;
-	//printf("push constant %08x : %s\n", retval, value);
+	//printf("push constant %08x : %s %d\n", retval, value, size);
 	return retval;
 }
 
@@ -60,7 +69,7 @@ uint32 is_gencode(uint32 offset, uchar opcode, ...) {
 	va_list argptr;
 	uint32 szinst = 0;
 	symrec * rec;
-	uchar dbgbuf[280];
+	uchar dbgbuf[1024];
 	uint16 index = 0;
 	va_start(argptr, opcode);
 	memset(dbgbuf, 0, sizeof(dbgbuf));
@@ -118,6 +127,10 @@ uint32 is_gencode(uint32 offset, uchar opcode, ...) {
 		case INS_MUL:
 		case INS_DIV:
 		case INS_MOD:
+		case INS_AND:
+		case INS_OR:
+		case INS_XOR:
+		case INS_NOT:
 		case INS_RET:
 		case INS_NOP:
 		case INS_CREQ:			//64	//-> compare equal 
@@ -404,6 +417,10 @@ static uint32 is_link_code(uint32 size) {
 			case INS_MUL:
 			case INS_DIV:
 			case INS_MOD:
+			case INS_AND:
+			case INS_OR:
+			case INS_XOR:
+			case INS_NOT:
 			case INS_RET:
 			case INS_NOP:
 			case INS_CREQ:			//64	//-> compare equal 
@@ -526,7 +543,7 @@ const char * _ins_name[] = {
 	"0","1","2","3","4","5","objconst","objnew","objdup","objdel",											//1
 	"0","1","objsz","objsub","4","objpush","objpop","7","8","objstore",									//2
 	"0","1","add","sub","mul","div","mod","7","8","9",												//3
-	"0","1","2","3","4","5","6","7","8","9",													//4
+	"and","or","xor","not","4","5","6","7","8","9",													//4
 	"0","1","2","3","4","5","6","7","8","9",													//5
 	"0","1","label","jump","creq","crneq","crgt","crlt","crgteq","crlteq",						//6
 	"jump","jfalse","jtrue","3","switch","5","6","7","8","9",													//7

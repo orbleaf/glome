@@ -25,7 +25,15 @@ C Libraries, Symbol Table, Code Generator & other C code
 
 %union semrec /* The Semantic Records */
 {
-	uchar bytes[256];
+	uchar string[4096];
+	struct {
+		uint16 length;
+		uchar value[4096];
+	} bytes;
+	struct {
+		uint16 type;
+		uchar string[4096];
+	} object;
 	uint32 state;
 	uint16 api_id;
 	yytoken token;
@@ -39,6 +47,8 @@ TOKENS
 %token CONSTANT		258		//"asda", {0,0,0}			--> constant value
 %token N_CONSTANT	259
 %token ARRAY		260		//bytes array
+%token NUMERIC		261		//float number
+%token N_NUMERIC	262		//negative number
 
 %token P_VAR	300		//string
 %token P_NEW	301		//new
@@ -108,15 +118,26 @@ TOKENS
 %token S_MODEQ		462		//lazy modulation
 %token S_RNEXT		470		//arrow right
 %token S_PDOT		471		//dot
+%token S_AND		472
+%token S_OR		473
+%token S_XOR		474
+%token S_NOT		475
+%token S_ANDEQ		476
+%token S_OREQ		477
+%token S_XOREQ		478
 
-%type<bytes> VARIABLE
+%type<string> VARIABLE
 %type<bytes> CONSTANT
 %type<bytes> N_CONSTANT
+%type<bytes> NUMERIC
+%type<bytes> N_NUMERIC
 %type<token> ARRAY
 //%type<bytes> constant_expr
-%type<bytes> instance_expr
-%type<bytes> instance_decl
+%type<object> instance_expr
+%type<api_id> instance_val
+%type<string> instance_decl
 %type<bytes> constant_val
+%type<bytes> numeric_val
 %type<state> accessor_func
 %type<api_id>	lhs_val
 %type<api_id>   rhs_val
@@ -257,61 +278,81 @@ assignment: lhs_val S_EQ { sp_flush_scope(); sp_lhs_clear(); sp_set_scope_var(sp
 | lhs_val S_MULEQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_MUL, NULL)); sp_end_expr(sp_peek_symrec()); }
 | lhs_val S_DIVEQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_DIV, NULL)); sp_end_expr(sp_peek_symrec()); }
 | lhs_val S_MODEQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_MOD, NULL)); sp_end_expr(sp_peek_symrec()); }
+| lhs_val S_ANDEQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_AND, NULL)); sp_end_expr(sp_peek_symrec()); }
+| lhs_val S_OREQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_OR, NULL)); sp_end_expr(sp_peek_symrec()); }
+| lhs_val S_XOREQ { sp_lhs_get($1); sp_lhs_clear(); sp_set_scope_var(sp_peek_symrec()); } lazy_expr { symrec * rec = sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_XOR, NULL)); sp_end_expr(sp_peek_symrec()); }
 | S_ADDADD VARIABLE { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $2)); sp_set_scope_var(sp_peek_symrec()); sp_load_stack($2); sp_load_constant(_RECAST(uchar *, "1")); sp_operation_stack(INS_ADD); sp_store_stack($2); }
 | S_SUBSUB VARIABLE { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $2)); sp_set_scope_var(sp_peek_symrec()); sp_load_stack($2); sp_load_constant(_RECAST(uchar *, "1")); sp_operation_stack(INS_SUB); sp_store_stack($2); }
 | VARIABLE S_ADDADD { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1)); sp_set_scope_var(sp_peek_symrec()); sp_lz_constant_after_scope($1, _RECAST(uchar *, "1"), INS_ADD); }
 | VARIABLE S_SUBSUB { sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1)); sp_set_scope_var(sp_peek_symrec()); sp_lz_constant_after_scope($1, _RECAST(uchar *, "1"), INS_SUB); }
 ;
+instance_expr: lazy_func_call { $$.type=128; }
+//| instance_decl { $$=0; sp_push_symrec(sp_lz_load_variable($1)); }
+| instance_decl { strcpy(_RECAST(char *, $$.string), _RECAST(const char *, $1)); $$.type=0;	/*sp_lz_load_variable($1);*/ }
+;
+instance_val: instance_expr S_RNEXT VARIABLE L_BR { sp_push_symrec(sp_start_method_call($3)); } method_param_list R_BR { symrec * meth = sp_pop_symrec(); if($1.type == 0) sp_lz_load_variable($1.string); sp_push_symrec(sp_end_method_call(meth)); }
+| instance_expr S_RNEXT VARIABLE { if($1.type == 0) sp_lz_load_variable($1.string); sm_printf("ins var access 2\n"); sp_lz_load_constant($3); $$=2; sp_push_symrec(sp_lhs_load(2, sp_pop_symrec())); sm_printf("ins var access 2 end\n"); }
+;
 rhs_val: rhs_val S_PDOT VARIABLE L_BR { sm_printf("rhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
 | rhs_val S_PDOT VARIABLE { sm_printf("rhs object access\n"); sp_lz_load_constant($3); $$=18; sp_push_symrec(sp_lhs_load(18, sp_pop_symrec())); }
 | rhs_val L_SB lazy_expr R_SB { sm_printf("rhs array access\n"); sp_pop_symrec(); $$=17; sp_push_symrec(sp_lhs_load(17, sp_pop_symrec())); }
 | lazy_val { $$=0; }
+| instance_val { $$=0; }
 ;
 lhs_val: lhs_val S_PDOT VARIABLE { sp_lhs_get($1); sm_printf("lhs object access\n"); sp_lz_load_constant($3); $$=18; sp_lhs_set(18); }
+| lazy_func_call S_RNEXT VARIABLE { sp_lhs_get(128); sm_printf("lhs var access\n"); sp_lz_load_constant($3); $$=2; sp_lhs_set(2); }
 | lhs_val L_SB { sp_lhs_get($1); } lazy_expr R_SB { sm_printf("lhs array access\n"); sp_pop_symrec(); $$=17; sp_lhs_set(17); }
 | lhs_val S_PDOT VARIABLE L_BR { sp_lhs_get($1); sm_printf("lhs api access %s\n", $3); sp_push_symrec(sp_start_function_call($3, 1)); } call_param_list R_BR { symrec * rec = sp_pop_symrec(); sp_end_function_call(rec); }
-| VARIABLE { sm_printf("push %s\n", $1); sp_lhs_store(sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1))); $$=0; } 
+| VARIABLE { sm_printf("push %s\n", $1); sp_lhs_store(0, sp_push_symrec(st_sym_select(SYM_TYPE_VAR, $1))); $$=0; } 
 ;
 //| lhs_val { sp_push_symrec(sp_lhs_load($1, sp_peek_symrec())); $$=0; }
-lazy_expr: L_BR lazy_stmt R_BR { symrec * rec = sp_peek_symrec(); sp_lz_load_variable(rec->name); }
-| lazy_expr N_CONSTANT { sp_lz_load_constant($2); sp_push_inode(sp_create_inode(INS_ADD, NULL)); }
+//lazy_expr: L_BR { sp_create_new_scope(NULL); } lazy_stmt R_BR { symrec * rec = sp_peek_symrec(); printf("aa"); sp_lz_load_variable(rec->name); }
+lazy_expr: lazy_expr N_CONSTANT { sp_lz_load_constant_s($2.value, $2.length); sp_push_inode(sp_create_inode(INS_ADD, NULL)); }
+| lazy_expr N_NUMERIC { sp_lz_load_numeric($2.value); sp_push_inode(sp_create_inode(INS_ADD, NULL)); }
 | lazy_expr S_ADD lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_ADD, NULL)); }
 | lazy_expr S_SUB lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_SUB, NULL)); }
 | lazy_expr S_MUL lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_MUL, NULL)); }
 | lazy_expr S_DIV lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_DIV, NULL)); }
 | lazy_expr S_MOD lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_MOD, NULL)); }
+| lazy_expr S_AND lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_AND, NULL)); }
+| lazy_expr S_OR lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_OR, NULL)); }
+| lazy_expr S_XOR lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_XOR, NULL)); }
 | lazy_expr T_EQ lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CREQ, NULL)); }
 | lazy_expr T_NE lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CRNE, NULL)); }
 | lazy_expr T_LT lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CRLT, NULL)); }
 | lazy_expr T_GT lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CRGT, NULL)); }
 | lazy_expr T_LTEQ lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CRLTEQ, NULL)); }
 | lazy_expr T_GTEQ lazy_expr { sp_pop_symrec(); sp_push_inode(sp_create_inode(INS_CRGTEQ, NULL)); }
+| S_NOT lazy_expr { sp_push_inode(sp_create_inode(INS_NOT, NULL)); }
 | rhs_val {  }
 ; 
-lazy_val: L_BR { sp_create_new_scope(NULL); } lazy_expr R_BR { sp_flush_scope(); sp_destroy_scope(); }
+lazy_val: L_BR { sp_flush_scope(); sp_create_new_scope(NULL); } lazy_expr R_BR { symrec * rec = sp_get_scope_var(); sp_flush_scope(); sp_destroy_scope();  }
 | P_NEW VARIABLE L_BR R_BR { sp_push_symrec(sp_lz_create_instance($2)); }
 | instance_decl { sp_push_symrec(sp_lz_load_class($1)); }
 | P_SIZEOF L_BR lazy_expr R_BR { sp_push_inode(sp_create_inode(INS_OBJSZ, NULL)); }
 | VARIABLE { sp_push_symrec(sp_lz_load_variable($1)); } 
-| lazy_func_call { }
+| lazy_func_call {  }
 | lambda_func_decl 
 | array_decl { sp_push_symrec(sp_lz_load_array_constant()); }
 | args_expr 
-| constant_val { sp_push_symrec(sp_lz_load_constant($1)); }
+| constant_val { sp_push_symrec(sp_lz_load_constant_s($1.value, $1.length)); }
+| numeric_val { sp_push_symrec(sp_lz_load_numeric($1.value)); }
 ;
-lazy_func_call: instance_expr S_RNEXT VARIABLE L_BR { sp_push_symrec(sp_start_method_call($3)); } method_param_list R_BR { symrec * meth = sp_pop_symrec(); sp_push_symrec(sp_lz_load_variable($1)); sp_push_symrec(sp_end_method_call(sp_pop_symrec(), meth)); }
-| VARIABLE L_BR { symrec * rec = sp_push_symrec(sp_start_function_call($1, 0)); sm_printf("start call func: %s\n",rec->name); } call_param_list R_BR { symrec * rec = sp_peek_symrec(); sm_printf("end call func: %s\n",rec->name); sp_end_function_call(rec); }
+lazy_func_call: VARIABLE L_BR { symrec * rec = sp_push_symrec(sp_start_function_call($1, 0)); sm_printf("start call func: %s\n",rec->name); } call_param_list R_BR { symrec * rec = sp_peek_symrec(); sm_printf("end call func: %s\n",rec->name); sp_end_function_call(rec); }
 ;
 //| api_func_call { sp_pop_symrec(); }
 //;
 array_decl: P_HEX L_BR { sp_new_array_constant(); } constant_seq R_BR
 ;
-constant_val: CONSTANT { strcpy(_RECAST(char *, $$), _RECAST(const char *, $1)); }
-| N_CONSTANT { strcpy(_RECAST(char *, $$), _RECAST(const char *, $1)); }
+constant_val: CONSTANT { $$=$1; }
+| N_CONSTANT { $$=$1; }
+;
+numeric_val: NUMERIC { $$=$1; }
+| N_NUMERIC { $$=$1; }
 ;
 constant_seq :  /* empty */
-| constant_val { sp_push_array_constant($1); } ',' constant_seq
-| constant_val { sp_push_array_constant($1); } 
+| constant_val { sp_push_array_constant($1.value); } ',' constant_seq
+| constant_val { sp_push_array_constant($1.value); } 
 ;
 args_expr: L_CL { sp_push_symrec(sp_start_api_call(15, 0)); } obj_params R_CL { sp_push_symrec(sp_end_function_call(sp_pop_symrec())); }
 | L_SB { sp_push_symrec(sp_start_api_call(16, 0)); } arr_params R_SB { sp_push_symrec(sp_end_function_call(sp_pop_symrec())); }
@@ -338,15 +379,13 @@ lambda_func_decl: P_FUNCTION L_BR { sp_push_symrec(sp_start_lambda_decl(0)); } l
 	block_stmt 
 { sp_end_lambda_decl(sp_peek_symrec()); }
 ;
-instance_expr: instance_decl { strcpy(_RECAST(char *, $$), _RECAST(const char *, $1)); }
-;
 instance_decl: VARIABLE { strcpy(_RECAST(char *, $$), _RECAST(const char *, $1)); }
 ;
 case_stmt: P_SWITCH case_expr_param { sp_push_symrec(sp_start_case()); sp_push_symrec(sp_create_label(_RECAST(uchar *, "__d"))); } 
 	L_CL case_block_stmt R_CL { symrec * rec = sp_pop_symrec(); symrec * srec = sp_pop_symrec(); sp_end_case(srec); sp_new_label(rec->name); } 
 ;
 case_single_stmt: /* empty */
-| P_CASE constant_val { sp_push_constant($2); } EOC { symrec * rec = sp_pop_symrec(); sp_label_case(sp_peek_symrec(), $2); sp_push_symrec(rec); }
+| P_CASE constant_val { sp_push_constant_s($2.value, $2.length); } EOC { symrec * rec = sp_pop_symrec(); sp_label_case_s(sp_peek_symrec(), $2.value, $2.length); sp_push_symrec(rec); }
 | P_DEFAULT EOC { symrec * rec = sp_pop_symrec(); sp_default_case(sp_peek_symrec()); sp_push_symrec(rec); }
 | block_stmt
 ;
@@ -356,12 +395,12 @@ exprs: expr T_AND { symrec * srec = sp_prev_symrec(); sp_jump_to(INS_JFALSE, sre
 ;
 expr: exprval { }
 ;
-exprval: lazy_expr { symrec * srec = sp_pop_symrec(); symrec * rec = sp_peek_symrec(); rec->sa_currec = srec; sp_flush_scope(); }
+exprval: lazy_expr { symrec * srec = sp_pop_symrec(); symrec * rec = sp_peek_symrec(); rec->sa_currec = srec; sp_flush_scope(); sm_printf("flush end\n"); }
 ;
 sys_func_decl: VARIABLE L_BR { sp_push_symrec(sp_declare_function($1)); } sys_param_list R_BR sys_extended_decl { symrec * rec = sp_pop_symrec(); if(sp_declare_function_end(rec->name) == NULL) YYABORT; }										/* internal function prototype */
 ;
 sys_extended_decl: /* empty */
-| P_SYSCALL CONSTANT { sp_declare_function_extern($2); }
+| P_SYSCALL CONSTANT { sp_declare_function_extern($2.value); }
 ;
 sys_param_list: /* empty */
 | VARIABLE { sp_declare_function_param($1); } ',' sys_param_list
@@ -392,8 +431,8 @@ class_stmt: accessor_func VARIABLE { sp_push_symrec(sp_create_function($2)); sp_
 | error_stmt
 ;
 body_func_extended_decl: 	/* empty */
-| P_ALIAS CONSTANT { sp_install_menu($2, sp_peek_symrec()); }		/* install current function as menu (setup menu) */
-| P_EVENT CONSTANT { sp_install_event($2, sp_peek_symrec()); }		/* install current function as event (setup event) */
+| P_ALIAS CONSTANT { sp_install_menu($2.value, sp_peek_symrec()); }		/* install current function as menu (setup menu) */
+| P_EVENT CONSTANT { sp_install_event($2.value, sp_peek_symrec()); }		/* install current function as event (setup event) */
 ;
 body_func_param_list: /* empty */
 | VARIABLE { sp_push_symrec(sp_create_param($1)); } ','  body_func_param_list { symrec * rec = sp_pop_symrec(); sp_lz_store_variable(rec->name); }
