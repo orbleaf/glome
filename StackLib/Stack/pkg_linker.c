@@ -303,14 +303,10 @@ void lk_clear_entries() {
 	{
 		if(((pk_object *)class_itr)->next != NULL) {
 			//printf("    \xc3%s\n", class_itr->name);
+			//fflush(0);
 			if(class_itr->properties != NULL) {
 				itr = (pk_method *)class_itr->properties;
 				while(itr != NULL) {
-					//if(((pk_object *)itr)->next != NULL) {
-					//	printf("    \xb3    \xc3%s\n", itr->name);
-					//} else {
-					//	printf("    \xb3    \xc0%s\n", itr->name);
-					//}
 					obj = itr;
 					itr = (pk_method *)((pk_object *)itr)->next;
 					free(obj);
@@ -318,14 +314,10 @@ void lk_clear_entries() {
 			}
 		} else {
 			//printf("    \xc0%s\n", class_itr->name);
+			//fflush(0);
 			if(class_itr->properties != NULL) {
 				itr = (pk_method *)class_itr->properties;
 				while(itr != NULL) {
-					//if(((pk_object *)itr)->next != NULL) {
-					//	printf("         \xc3%s\n", itr->name);
-					//} else {
-					//	printf("         \xc0%s\n", itr->name);
-					//}
 					obj = itr;
 					itr = (pk_method *)((pk_object *)itr)->next;
 					free(obj);
@@ -334,7 +326,7 @@ void lk_clear_entries() {
 		}
 		obj = class_itr;
 		class_itr = (pk_class *)((pk_object *)class_itr)->next;
-		free(class_itr);
+		free(obj);
 	}
 	_pk_iroot = NULL;
 	//printf("=====================   END DUMP   =====================\n");
